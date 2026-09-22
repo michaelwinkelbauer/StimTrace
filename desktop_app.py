@@ -5966,44 +5966,118 @@ class MainWindow(QMainWindow):
         if configured_path.is_file():
             return configured_path
 
-        QMessageBox.information(
-            self,
-            "Google Drive setup",
-            "StimTrace does not include Google OAuth credentials. To use optional Google "
-            "Drive and Colab workflows, select the JSON file for an OAuth Desktop client "
-            "from your own Google Cloud project. The file remains in its current location; "
-            "StimTrace saves only its local path. See QUICK_START.md for setup steps.",
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Set up optional Google Drive")
+        dialog.setMinimumWidth(650)
+        layout = QVBoxLayout(dialog)
+        title = QLabel("Set up Google Drive and Colab in five steps")
+        title.setStyleSheet("font-size: 17px; font-weight: 700;")
+        layout.addWidget(title)
+        introduction = QLabel(
+            "Cloud processing is optional. StimTrace does not distribute a shared Google "
+            "OAuth configuration, so this one-time setup keeps your Google Cloud project "
+            "and Drive access under your control."
         )
-        filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select your Google OAuth Desktop client JSON file",
-            str(Path.home()),
-            "JSON files (*.json)",
+        introduction.setWordWrap(True)
+        layout.addWidget(introduction)
+
+        setup_steps = (
+            (
+                "1. Create or select a Google Cloud project",
+                "Open Google Cloud Console and create a project, for example ‘StimTrace’. "
+                "Use that project for the remaining steps.",
+                "Open Google Cloud Console",
+                "https://console.cloud.google.com/projectselector2/home/dashboard",
+            ),
+            (
+                "2. Configure the OAuth audience",
+                "Open Google Auth Platform. Configure Branding, keep the audience External, "
+                "and add the Google account you will use as a test user.",
+                "Open Google Auth Platform",
+                "https://console.cloud.google.com/auth/overview",
+            ),
+            (
+                "3. Enable Google Drive API",
+                "Open the Google Drive API page and select Enable for the project you created.",
+                "Open Google Drive API",
+                "https://console.cloud.google.com/apis/library/drive.googleapis.com",
+            ),
+            (
+                "4. Create and download a Desktop-app OAuth client",
+                "Open Clients, create an OAuth client, choose Desktop app, then download the "
+                "generated JSON file. Keep it in a private location; do not place it in the "
+                "StimTrace folder or share it.",
+                "Open OAuth clients",
+                "https://console.cloud.google.com/auth/clients",
+            ),
         )
-        if not filename:
-            return None
-        selected_path = Path(filename)
-        try:
-            configuration = json.loads(selected_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-            QMessageBox.warning(
-                self,
-                "Invalid OAuth configuration",
-                f"StimTrace could not read the selected JSON file:\n{error}",
+        for heading, text, button_text, url in setup_steps:
+            card = QFrame()
+            card.setObjectName("workflowStep")
+            card_layout = QHBoxLayout(card)
+            description = QLabel(f"<b>{heading}</b><br>{text}")
+            description.setWordWrap(True)
+            card_layout.addWidget(description, 1)
+            open_page = QPushButton(button_text)
+            open_page.clicked.connect(
+                lambda _checked=False, target=url: QDesktopServices.openUrl(QUrl(target))
             )
-            return None
-        installed = configuration.get("installed") if isinstance(configuration, dict) else None
-        if not isinstance(installed, dict) or not installed.get("client_id"):
-            QMessageBox.warning(
-                self,
-                "OAuth Desktop client required",
-                "Select the JSON file for a Google OAuth client created with the "
-                "Desktop app application type.",
+            card_layout.addWidget(open_page)
+            layout.addWidget(card)
+
+        step_five = QLabel("<b>5. Select the downloaded JSON file</b><br>"
+                            "StimTrace stores only the path on this computer and never copies "
+                            "or uploads the file.")
+        step_five.setWordWrap(True)
+        layout.addWidget(step_five)
+        buttons = QHBoxLayout()
+        select_file = QPushButton("Select OAuth Desktop-client JSON")
+        select_file.setProperty("role", "primary")
+        cancel = QPushButton("Use local analysis only")
+        buttons.addWidget(select_file)
+        buttons.addStretch(1)
+        buttons.addWidget(cancel)
+        layout.addLayout(buttons)
+
+        selected_path: Path | None = None
+
+        def choose_file() -> None:
+            nonlocal selected_path
+            filename, _ = QFileDialog.getOpenFileName(
+                dialog,
+                "Select your Google OAuth Desktop client JSON file",
+                str(Path.home()),
+                "JSON files (*.json)",
             )
-            return None
-        self.settings.oauth_client_config_path = str(selected_path.resolve())
-        self.settings.save()
-        return selected_path
+            if not filename:
+                return
+            candidate = Path(filename)
+            try:
+                configuration = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+                QMessageBox.warning(
+                    dialog,
+                    "Invalid OAuth configuration",
+                    f"StimTrace could not read the selected JSON file:\n{error}",
+                )
+                return
+            installed = configuration.get("installed") if isinstance(configuration, dict) else None
+            if not isinstance(installed, dict) or not installed.get("client_id"):
+                QMessageBox.warning(
+                    dialog,
+                    "OAuth Desktop client required",
+                    "Select the JSON file for a Google OAuth client created with the "
+                    "Desktop app application type.",
+                )
+                return
+            selected_path = candidate.resolve()
+            self.settings.oauth_client_config_path = str(selected_path)
+            self.settings.save()
+            dialog.accept()
+
+        select_file.clicked.connect(choose_file)
+        cancel.clicked.connect(dialog.reject)
+        return selected_path if dialog.exec() == QDialog.Accepted else None
 
     @Slot(object)
     def finish_manual_sign_in(self, email: object) -> None:
