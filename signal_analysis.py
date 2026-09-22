@@ -850,6 +850,10 @@ class SignalAnalysisPage(QWidget):
         self.baseline_columns: set[str] = set()
         self.auxiliary_traces_hidden = False
         self.trace_processing: dict[str, TraceProcessingSettings] = {}
+        # The first-peak action is intentionally reversible.  Keep the offsets
+        # that existed immediately before the automatic alignment so a second
+        # click restores the exact timing state rather than assuming zero.
+        self._first_peak_alignment_restore: dict[str, int] = {}
         self.trace_row_controls: dict[str, tuple[QPushButton, QLabel]] = {}
         self._pending_plot_view: tuple[tuple[float, float], tuple[float, float]] | None = None
         self._trace_drag_anchor_item: QListWidgetItem | None = None
@@ -1504,6 +1508,8 @@ class SignalAnalysisPage(QWidget):
         if shifted == current.time_shift_frames:
             return
         self.trace_processing[column] = replace(current, time_shift_frames=shifted)
+        if column in getattr(self, "_first_peak_alignment_restore", {}):
+            self._first_peak_alignment_restore.clear()
         self.plot_cache.pop(column, None)
         self.update_trace_row_processing(column)
         self.schedule_plot(preserve_view=True)
@@ -1548,6 +1554,9 @@ class SignalAnalysisPage(QWidget):
             changed += 1
         if not changed:
             return
+        if set(selected) & set(getattr(self, "_first_peak_alignment_restore", {})):
+            self._first_peak_alignment_restore.clear()
+            getattr(self, "update_first_peak_alignment_action", lambda: None)()
         self.schedule_plot(preserve_view=True)
         self.set_status(
             f"Moved {changed} selected trace{'s' if changed != 1 else ''} one frame "
@@ -1555,7 +1564,7 @@ class SignalAnalysisPage(QWidget):
         )
 
     def align_selected_traces_to_first_peak(self) -> None:
-        """Align selected traces by their first detected peak without changing the source data."""
+        """Toggle first-peak alignment without ever changing source time data."""
         if self.data is None:
             return
         columns = self.selected_columns()
@@ -1566,6 +1575,30 @@ class SignalAnalysisPage(QWidget):
                 "Select at least two traces to align their first detected peaks.",
             )
             return
+        restore_offsets = getattr(self, "_first_peak_alignment_restore", {})
+        if restore_offsets and set(restore_offsets) == set(columns):
+            changed = 0
+            for column, original_shift in restore_offsets.items():
+                current = self.trace_processing.get(column, TraceProcessingSettings())
+                if current.time_shift_frames == original_shift:
+                    continue
+                self.trace_processing[column] = replace(
+                    current, time_shift_frames=original_shift
+                )
+                self.plot_cache.pop(column, None)
+                self.update_trace_row_processing(column)
+                changed += 1
+            self._first_peak_alignment_restore = {}
+            getattr(self, "update_first_peak_alignment_action", lambda: None)()
+            if changed:
+                self.schedule_plot(preserve_view=True)
+            self.set_status(
+                "Restored the timing offsets that were present before first-peak alignment."
+            )
+            return
+        # A different selection starts a new alignment operation; it must not
+        # accidentally restore offsets for another group of traces.
+        self._first_peak_alignment_restore = {}
         try:
             shared_settings = self.settings()
         except ValueError as error:
@@ -1599,6 +1632,12 @@ class SignalAnalysisPage(QWidget):
         target_time = min(time for time, _dt in first_peaks.values())
         maximum = max(1, len(self.data) - 1)
         changed = 0
+        original_offsets = {
+            column: self.trace_processing.get(
+                column, TraceProcessingSettings()
+            ).time_shift_frames
+            for column in columns
+        }
         for column, (peak_time, dt) in first_peaks.items():
             current = self.trace_processing.get(column, TraceProcessingSettings())
             frame_delta = int(round((target_time - peak_time) / dt))
@@ -1615,10 +1654,28 @@ class SignalAnalysisPage(QWidget):
         if not changed:
             self.set_status("Selected first peaks are already aligned to the nearest frame.")
             return
+        self._first_peak_alignment_restore = original_offsets
+        getattr(self, "update_first_peak_alignment_action", lambda: None)()
         self.schedule_plot(preserve_view=True)
         self.set_status(
             f"Aligned the first detected peak of {len(columns)} selected traces. "
             "Analyze again to refresh metrics."
+        )
+
+    def update_first_peak_alignment_action(self) -> None:
+        """Present one clear align/restore action for the current selection."""
+        button = getattr(self, "align_first_peak_button", None)
+        if button is None:
+            return
+        selected = set(self.selected_columns())
+        can_restore = bool(self._first_peak_alignment_restore) and selected == set(
+            self._first_peak_alignment_restore
+        )
+        button.setText("Restore timing" if can_restore else "Align first peak")
+        button.setToolTip(
+            "Restore the timing offsets present before automatic peak alignment."
+            if can_restore
+            else "Align the first detected peak of all selected traces to the earliest selected peak."
         )
 
     def settings(self) -> AnalysisSettings:
@@ -2254,6 +2311,7 @@ class SignalAnalysisPage(QWidget):
         self.legend_shift_earlier_button.setEnabled(selected_trace_controls_enabled)
         self.legend_shift_later_button.setEnabled(selected_trace_controls_enabled)
         self.align_first_peak_button.setEnabled(actions_enabled and len(selected) >= 2)
+        self.update_first_peak_alignment_action()
         if self._selected_recording_path is not None:
             self.watch_recording_button.setToolTip(
                 f"Open the annotated recording in a new window:\n{self._selected_recording_path}"

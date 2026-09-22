@@ -537,6 +537,36 @@ class SignalProcessingTests(unittest.TestCase):
         self.assertIn("A", page.plot_cache)
         self.assertEqual(plot_requests, [{"preserve_view": True}])
 
+    def test_align_first_peak_second_click_restores_prior_offsets(self):
+        page = type("PageStub", (), {})()
+        time = np.arange(0.0, 3.0, 0.1)
+        page.data = pd.DataFrame({
+            "time_s": time,
+            "A": np.exp(-((time - 1.0) / 0.14) ** 2),
+            "B": np.exp(-((time - 1.4) / 0.14) ** 2),
+        })
+        page.time_column = "time_s"
+        page.trace_processing = {
+            "A": TraceProcessingSettings(time_shift_frames=2),
+            "B": TraceProcessingSettings(time_shift_frames=-1),
+        }
+        page.plot_cache = {"A": {}, "B": {}}
+        page.selected_columns = lambda: ["A", "B"]
+        page.settings = lambda: AnalysisSettings(smoothing_s=0.0, prominence_pct=10.0)
+        page.settings_for_column = (
+            lambda column, shared: SignalAnalysisPage.settings_for_column(page, column, shared)
+        )
+        page.update_trace_row_processing = lambda _column: None
+        page.schedule_plot = lambda **_kwargs: None
+        page.set_status = lambda _message: None
+
+        SignalAnalysisPage.align_selected_traces_to_first_peak(page)
+        SignalAnalysisPage.align_selected_traces_to_first_peak(page)
+
+        self.assertEqual(page.trace_processing["A"].time_shift_frames, 2)
+        self.assertEqual(page.trace_processing["B"].time_shift_frames, -1)
+        self.assertEqual(page._first_peak_alignment_restore, {})
+
     def test_inline_frame_arrow_shifts_only_its_trace(self):
         page = type("PageStub", (), {})()
         page.data = pd.DataFrame({"time_s": np.arange(10), "A": np.arange(10), "B": np.arange(10)})
