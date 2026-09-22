@@ -3,7 +3,7 @@
 For an end-user walkthrough, see [QUICK_START.md](QUICK_START.md).
 
 Current desktop release metadata is stored in [`app_metadata.py`](app_metadata.py).
-Version 1.0.3 is a research-use software release; it does not claim clinical use or
+Version 1.0.4 is a research-use software release; it does not claim clinical use or
 completed external scientific validation. Passing software tests does not by itself validate
 segmentation, tracking, or force measurements.
 

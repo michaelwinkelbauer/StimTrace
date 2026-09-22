@@ -10,7 +10,7 @@ authors:
     given-names: "Parth"
     affiliation: "Institute for Molecular and Translational Medicine, Department of Health Sciences and Technology, ETH Zürich, Schwerzenbach, Switzerland"
     email: "parth.chansoria@hest.ethz.ch"
-version: 1.0.3
+version: 1.0.4
 repository-code: "https://github.com/michaelwinkelbauer/StimTrace"
 license: MIT
 keywords:
