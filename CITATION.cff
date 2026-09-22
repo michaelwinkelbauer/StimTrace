@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use StimTrace in your research, please cite this software."
+title: "StimTrace"
+type: software
+authors:
+  - family-names: "Winkelbauer"
+    given-names: "Michael"
+    affiliation: "Institute for Biomechanics and Institute for Molecular and Translational Medicine, Department of Health Sciences and Technology, ETH Zürich, Switzerland"
+  - family-names: "Chansoria"
+    given-names: "Parth"
+    affiliation: "Institute for Molecular and Translational Medicine, Department of Health Sciences and Technology, ETH Zürich, Schwerzenbach, Switzerland"
+    email: "parth.chansoria@hest.ethz.ch"
+version: 1.0.2
+repository-code: "https://github.com/michaelwinkelbauer/StimTrace"
+license: MIT
+keywords:
+  - video analysis
+  - cell tracking
+  - force analysis
+  - scientific software

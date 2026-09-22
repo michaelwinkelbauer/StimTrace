@@ -1,0 +1,51 @@
+# Credentials and per-user state
+client_secret.json
+token.json
+config.json
+jobs.json
+*.log
+
+# Models, datasets, recordings, and generated results
+model.pth
+*.pth
+*.pt
+*.onnx
+*.avi
+*.mp4
+*.mov
+*.mkv
+*.zip
+results/
+model_cache/
+runtime_validation/
+.test-metrics-workbook-*/
+
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and build products
+.venv/
+.venv-*/
+venv/
+build/
+build-*/
+build-universal/
+dist/
+*.spec.bak
+
+# Runtime control files
+.cancel_*
+.control_*
+
+# Operating-system and editor state
+.DS_Store
+Thumbs.db
+*.user
+*.suo
+

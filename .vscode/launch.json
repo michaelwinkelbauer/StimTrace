@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run StimTrace",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/desktop_app.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "python": "${env:USERPROFILE}/emt-env/Scripts/python.exe",
+      "env": {
+        "NO_ALBUMENTATIONS_UPDATE": "1"
+      }
+    }
+  ]
+}
