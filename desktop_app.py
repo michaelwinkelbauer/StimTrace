@@ -837,6 +837,38 @@ class DriveClient:
             self.service = self._build_service(credentials)
 
     @staticmethod
+    def oauth_client_id(config_path: Path) -> str:
+        """Read the public client identifier from a Desktop-app OAuth file."""
+        configuration = json.loads(config_path.read_text(encoding="utf-8"))
+        installed = configuration.get("installed") if isinstance(configuration, dict) else None
+        client_id = installed.get("client_id") if isinstance(installed, dict) else ""
+        if not isinstance(client_id, str) or not client_id:
+            raise ValueError(
+                "The selected file is not a Google OAuth Desktop-app client configuration."
+            )
+        return client_id
+
+    @classmethod
+    def credentials_match_oauth_client(
+        cls,
+        credentials: Credentials,
+        config_path: Path | None,
+    ) -> bool:
+        """A saved session is valid only for the currently selected OAuth client."""
+        if config_path is None or not config_path.is_file():
+            return False
+        try:
+            return credentials.client_id == cls.oauth_client_id(config_path)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            return False
+
+    def clear_local_session(self) -> None:
+        """Forget the local token without revoking a token owned by another client."""
+        (USER_DATA_DIR / "token.json").unlink(missing_ok=True)
+        self.service = None
+        self.account_email = ""
+
+    @staticmethod
     def _execute_with_backoff(request, attempts: int = 6):
         for attempt in range(attempts):
             try:
@@ -879,6 +911,12 @@ class DriveClient:
         credentials: Credentials | None = None
         if token_path.exists():
             credentials = Credentials.from_authorized_user_file(token_path, SCOPES)
+            if not self.credentials_match_oauth_client(
+                credentials,
+                oauth_client_config_path,
+            ):
+                credentials = None
+                token_path.unlink(missing_ok=True)
         if credentials and credentials.expired and credentials.refresh_token:
             credentials.refresh(Request())
         if not credentials or not credentials.valid:
@@ -894,7 +932,7 @@ class DriveClient:
             credentials = InstalledAppFlow.from_client_secrets_file(
                 oauth_client_config_path,
                 SCOPES,
-            ).run_local_server(port=0)
+            ).run_local_server(port=0, prompt="select_account")
         token_path.write_text(credentials.to_json(), encoding="utf-8")
         self.service = self._build_service(credentials)
         user = self.service.about().get(fields="user(emailAddress)").execute().get("user", {})
@@ -3543,6 +3581,10 @@ class MainWindow(QMainWindow):
         set_action_icon(self.sign_out_button, "cancel")
         self.sign_out_button.clicked.connect(self.sign_out)
         self.sign_out_button.setEnabled(False)
+        self.drive_settings_button = QPushButton("Google Drive settings")
+        self.drive_settings_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        set_action_icon(self.drive_settings_button, "settings")
+        self.drive_settings_button.clicked.connect(self.open_google_drive_settings)
         help_button = QPushButton("Help")
         help_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         set_action_icon(help_button, "help")
@@ -3552,6 +3594,7 @@ class MainWindow(QMainWindow):
         # Preserve right-aligned compact actions when the setup/status widgets
         # are temporarily hidden during an active job.
         title_row.addStretch(1)
+        title_row.addWidget(self.drive_settings_button)
         title_row.addWidget(self.sign_button)
         title_row.addWidget(self.sign_out_button)
         title_row.addWidget(help_button)
@@ -3852,7 +3895,11 @@ class MainWindow(QMainWindow):
         self.hardware_probe_start_timer = QTimer(self)
         self.hardware_probe_start_timer.setSingleShot(True)
         self.hardware_probe_start_timer.timeout.connect(self.start_local_hardware_probe)
-        if self.settings.remember_google_sign_in and (USER_DATA_DIR / "token.json").exists():
+        if (
+            self.settings.remember_google_sign_in
+            and self.selected_oauth_client_config() is not None
+            and (USER_DATA_DIR / "token.json").exists()
+        ):
             # Let the maximized window paint before performing saved-session network calls.
             self.sign_button.setEnabled(False)
             self.sign_button.setText("Restoring...")
@@ -4646,9 +4693,17 @@ class MainWindow(QMainWindow):
         self.sign_button.setEnabled(False)
         self.sign_button.setText("Restoring...")
         self.set_auth_status("Restoring saved Google session...", signed_in=False)
+        oauth_client_config = self.selected_oauth_client_config()
+        if oauth_client_config is None:
+            self.sign_button.setText("Sign in")
+            self.sign_button.setEnabled(True)
+            return
 
         def restore() -> str:
-            email = self.drive.sign_in(interactive=False)
+            email = self.drive.sign_in(
+                interactive=False,
+                oauth_client_config_path=oauth_client_config,
+            )
             self.drive.ensure_workspace(self.settings)
             return email
 
@@ -4843,10 +4898,13 @@ class MainWindow(QMainWindow):
         if job and not self.submission_in_progress:
             self.set_active_job_focus(job, job.get("state", "queued"))
 
-    def sign_out(self) -> None:
+    def sign_out(self, _checked: bool = False, *, revoke: bool = True) -> None:
         self.poll_timer.stop()
         self.worker_timer.stop()
-        self.drive.sign_out()
+        if revoke:
+            self.drive.sign_out()
+        else:
+            self.drive.clear_local_session()
         self.active_progress_file_id = ""
         self.monitored_job_id = ""
         self.set_auth_status("Not signed in", signed_in=False)
@@ -5960,7 +6018,7 @@ class MainWindow(QMainWindow):
         self.sign_in_thread = thread
         thread.start()
 
-    def select_oauth_client_config(self) -> Path | None:
+    def _legacy_oauth_setup_dialog(self) -> Path | None:
         """Return a user-managed OAuth Desktop client config without copying it."""
         configured_path = Path(self.settings.oauth_client_config_path).expanduser()
         if configured_path.is_file():
@@ -6079,6 +6137,140 @@ class MainWindow(QMainWindow):
         cancel.clicked.connect(dialog.reject)
         return selected_path if dialog.exec() == QDialog.Accepted else None
 
+    def selected_oauth_client_config(self) -> Path | None:
+        """Return the selected OAuth configuration only when it remains available."""
+        configured_path = Path(self.settings.oauth_client_config_path).expanduser()
+        return configured_path if configured_path.is_file() else None
+
+    def select_oauth_client_config(self) -> Path | None:
+        configured_path = self.selected_oauth_client_config()
+        if configured_path is not None:
+            try:
+                DriveClient.oauth_client_id(configured_path)
+                return configured_path
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                pass
+        self.open_google_drive_settings()
+        return self.selected_oauth_client_config()
+
+    def choose_oauth_client_config(self, parent: QWidget) -> Path | None:
+        filename, _ = QFileDialog.getOpenFileName(
+            parent,
+            "Select your Google OAuth Desktop client JSON file",
+            str(Path.home()),
+            "JSON files (*.json)",
+        )
+        if not filename:
+            return None
+        candidate = Path(filename).resolve()
+        try:
+            DriveClient.oauth_client_id(candidate)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            QMessageBox.warning(parent, "Invalid OAuth configuration", str(error))
+            return None
+        return candidate
+
+    def set_oauth_client_config(self, config_path: Path) -> None:
+        """Select a client and discard the local session for any previous client."""
+        changed = self.settings.oauth_client_config_path != str(config_path)
+        if changed:
+            self.sign_out(revoke=False)
+            DriveClient._clear_workspace_settings(self.settings)
+            self.settings.google_account_email = ""
+        self.settings.oauth_client_config_path = str(config_path)
+        self.settings.save()
+
+    def remove_oauth_client_config(self) -> None:
+        self.sign_out(revoke=False)
+        DriveClient._clear_workspace_settings(self.settings)
+        self.settings.google_account_email = ""
+        self.settings.oauth_client_config_path = ""
+        self.settings.save()
+
+    def open_google_drive_settings(self, _checked: bool = False) -> None:
+        """Show, change, or remove the OAuth client used for Google Drive."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Google Drive settings")
+        dialog.setMinimumWidth(580)
+        layout = QVBoxLayout(dialog)
+        title = QLabel("Google Drive and Colab")
+        title.setStyleSheet("font-size: 17px; font-weight: 700;")
+        layout.addWidget(title)
+        explanation = QLabel(
+            "Cloud processing uses a Google OAuth Desktop-app configuration that you choose. "
+            "StimTrace stores only its path on this computer."
+        )
+        explanation.setWordWrap(True)
+        layout.addWidget(explanation)
+
+        config_label = QLabel()
+        config_label.setWordWrap(True)
+        config_box = QFrame()
+        config_box.setObjectName("workflowStep")
+        config_layout = QVBoxLayout(config_box)
+        config_layout.addWidget(config_label)
+        layout.addWidget(config_box)
+
+        guidance = QLabel(
+            "To create a configuration: create or select a Google Cloud project, configure "
+            "the OAuth audience and test user, enable Google Drive API, then create an OAuth "
+            "client of type Desktop app and download its JSON file."
+        )
+        guidance.setWordWrap(True)
+        layout.addWidget(guidance)
+        open_console = QPushButton("Open Google Cloud Console")
+        open_console.clicked.connect(
+            lambda: QDesktopServices.openUrl(
+                QUrl("https://console.cloud.google.com/auth/overview")
+            )
+        )
+        layout.addWidget(open_console, 0, Qt.AlignLeft)
+
+        buttons = QHBoxLayout()
+        choose = QPushButton("Choose OAuth JSON")
+        choose.setProperty("role", "primary")
+        remove = QPushButton("Remove selected configuration")
+        close = QPushButton("Close")
+        buttons.addWidget(choose)
+        buttons.addWidget(remove)
+        buttons.addStretch(1)
+        buttons.addWidget(close)
+        layout.addLayout(buttons)
+
+        def update_selected_label() -> None:
+            current = self.selected_oauth_client_config()
+            if current is None:
+                config_label.setText("No OAuth configuration is selected.")
+                remove.setEnabled(False)
+                return
+            try:
+                client_id = DriveClient.oauth_client_id(current)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                config_label.setText("The selected OAuth configuration cannot be read.")
+                remove.setEnabled(True)
+                return
+            config_label.setText(
+                f"Selected file: {current.name}\nClient ID: {client_id}\nLocation: {current}"
+            )
+            remove.setEnabled(True)
+
+        def choose_file() -> None:
+            config_path = self.choose_oauth_client_config(dialog)
+            if config_path is None:
+                return
+            self.set_oauth_client_config(config_path)
+            update_selected_label()
+
+        def remove_file() -> None:
+            self.remove_oauth_client_config()
+            update_selected_label()
+
+        choose.clicked.connect(choose_file)
+        remove.clicked.connect(remove_file)
+        close.clicked.connect(dialog.accept)
+        update_selected_label()
+        dialog.exec()
+
     @Slot(object)
     def finish_manual_sign_in(self, email: object) -> None:
         self.apply_signed_in_state(str(email), open_colab=True)
@@ -6092,6 +6284,26 @@ class MainWindow(QMainWindow):
         if self.training_page is not None:
             self.training_page.update_training_account_controls()
             self.training_page.update_training_workflow()
+        if "deleted_client" in message:
+            dialog = QMessageBox(self)
+            dialog.setIcon(QMessageBox.Critical)
+            dialog.setWindowTitle("OAuth client unavailable")
+            dialog.setText(
+                "The selected Google OAuth client has been deleted or is no longer available."
+            )
+            dialog.setInformativeText(
+                "Choose a working OAuth Desktop-app JSON file in Google Drive settings, "
+                "then sign in again."
+            )
+            settings_button = dialog.addButton(
+                "Google Drive settings",
+                QMessageBox.ActionRole,
+            )
+            dialog.addButton(QMessageBox.Close)
+            dialog.exec()
+            if dialog.clickedButton() is settings_button:
+                self.open_google_drive_settings()
+            return
         QMessageBox.critical(self, "Sign-in failed", message)
 
     @Slot()
