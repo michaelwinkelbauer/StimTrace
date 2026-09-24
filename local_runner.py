@@ -404,6 +404,14 @@ def run_local(
                     "estimated_remaining_seconds": round(eta) if eta is not None else None,
                 })
 
+            def report_segmentation(
+                current_video_name: str,
+                current: int,
+                stage_total: int,
+            ) -> None:
+                """Adapt per-batch segmentation updates to the local job event format."""
+                report_stage(current_video_name, "segmenting", current, stage_total)
+
             try:
                 trace = process_video(
                     processing_video,
@@ -411,6 +419,7 @@ def run_local(
                     model,
                     device,
                     cfg,
+                    progress_callback=report_segmentation,
                     stage_callback=report_stage,
                     cancel_check=cancel_check,
                     runtime_settings_callback=runtime_settings,
