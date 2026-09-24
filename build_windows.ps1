@@ -1,6 +1,6 @@
 param(
     [string]$Python = "$env:USERPROFILE\emt-env\Scripts\python.exe",
-    [string]$BundleName = "StimTrace",
+    [string]$BundleName = "",
     [string]$WorkPath = "build",
     [switch]$SkipInstall,
     [switch]$Clean
@@ -12,6 +12,18 @@ Set-Location -LiteralPath $Project
 
 if (-not (Test-Path -LiteralPath $Python)) {
     throw "Python environment not found at $Python. Pass -Python with the intended python.exe."
+}
+
+$ApplicationVersion = (& $Python -c "import app_metadata; print(app_metadata.APPLICATION_VERSION)").Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ApplicationVersion)) {
+    throw "Could not read the application version from app_metadata.py."
+}
+if ([string]::IsNullOrWhiteSpace($BundleName)) {
+    $BundleName = "StimTrace-$ApplicationVersion-Windows-x64"
+}
+$DistributionPath = Join-Path $Project "dist\$BundleName"
+if (Test-Path -LiteralPath $DistributionPath) {
+    throw "Refusing to overwrite existing release folder: $DistributionPath. Choose a new version or pass a new -BundleName."
 }
 
 & $Python "verify_build.py"
