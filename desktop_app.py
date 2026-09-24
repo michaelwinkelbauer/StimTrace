@@ -192,9 +192,6 @@ MODEL_PARAMETER_KEYS = (
     "kalman_q_pos",
     "kalman_q_vel",
     "kalman_r",
-    "kalman_innovation_gate_enabled",
-    "kalman_innovation_gate_confidence",
-    "kalman_innovation_gate_min_radius_px",
     "inference_batch_size",
     "cpu_postprocess_workers",
     "progress_interval_seconds",
@@ -211,9 +208,6 @@ FACTORY_MODEL_PARAMETERS: dict[str, Any] = {
     "kalman_q_pos": 2.0,
     "kalman_q_vel": 36.0,
     "kalman_r": 8.0,
-    "kalman_innovation_gate_enabled": True,
-    "kalman_innovation_gate_confidence": 0.99,
-    "kalman_innovation_gate_min_radius_px": 120.0,
     "inference_batch_size": 8,
     "cpu_postprocess_workers": 1,
     "progress_interval_seconds": 5.0,
@@ -262,7 +256,7 @@ SETTING_DESCRIPTIONS = {
         "frames without a valid mask remain missing. Kalman filtering changes the displacement "
         "trajectory and can alter kinetic metrics such as peak amplitude, timing, and slopes. "
         "For primary kinetic endpoints, use None when segmentation quality is adequate, or "
-        "validate and report the Kalman and innovation-gate settings."
+        "validate and report the Kalman settings."
     ),
     "kalman_q_vel": (
         "Velocity process-noise variance in px^2/s^2, added at each prediction step. Higher "
@@ -271,22 +265,6 @@ SETTING_DESCRIPTIONS = {
     "kalman_r": (
         "Position measurement-noise variance in px^2. Higher values trust each segmented "
         "position less and produce a smoother track."
-    ),
-    "kalman_innovation_gate_enabled": (
-        "Before a segmented center updates the Kalman filter, compare its innovation with "
-        "the predicted innovation covariance. Rejected measurements remain visible in raw "
-        "QC columns but are excluded from displacement and force."
-    ),
-    "kalman_innovation_gate_confidence": (
-        "Statistical acceptance region for two-dimensional center measurements. A higher "
-        "percentage accepts larger deviations; 99% is the default. This depends on "
-        "appropriately tuned Kalman process and measurement variances."
-    ),
-    "kalman_innovation_gate_min_radius_px": (
-        "Always accept an innovation within this pixel radius. The 120 px default preserves "
-        "the original notebook's validated operating boundary while the covariance model "
-        "remains empirically tuned. Set this to zero only after calibrating Q and R for a "
-        "pure covariance gate."
     ),
     "progress_interval_seconds": (
         "How often Colab writes progress to Google Drive for the desktop application. "
@@ -709,9 +687,6 @@ class Settings:
     kalman_q_pos: float = 2.0
     kalman_q_vel: float = 36.0
     kalman_r: float = 8.0
-    kalman_innovation_gate_enabled: bool = True
-    kalman_innovation_gate_confidence: float = 0.99
-    kalman_innovation_gate_min_radius_px: float = 120.0
     inference_batch_size: int = 8
     cpu_postprocess_workers: int = 1
     progress_interval_seconds: float = 5.0
@@ -2158,7 +2133,8 @@ class SettingsDialog(QDialog):
             benchmark_button = QPushButton("Configure Kalman benchmark")
             set_action_icon(benchmark_button, "settings")
             benchmark_button.setToolTip(
-                "Expert tool: segment once and compare several Kalman tracking configurations."
+                "Expert tool: segment once and compare an unfiltered reference with several "
+                "Kalman tracking configurations."
             )
             benchmark_button.clicked.connect(self.configure_kalman_benchmark)
             self.benchmark_summary = QLabel()
@@ -2195,33 +2171,12 @@ class SettingsDialog(QDialog):
             "legacy_area_normalization",
             self.area_normalization,
         )
-        self.innovation_gate = QCheckBox(
-            "Reject statistically implausible segmented centers"
-        )
-        self.innovation_gate_label = self.add_described_row(
-            expert_layout,
-            "Innovation gate",
-            "kalman_innovation_gate_enabled",
-            self.innovation_gate,
-        )
-        self.innovation_gate_confidence = QDoubleSpinBox()
-        self.innovation_gate_confidence.setRange(90.0, 99.99)
-        self.innovation_gate_confidence.setDecimals(2)
-        self.innovation_gate_confidence.setSingleStep(0.1)
-        self.innovation_gate_confidence.setSuffix(" %")
-        self.innovation_gate_confidence_label = self.add_described_row(
-            expert_layout,
-            "Innovation-gate confidence",
-            "kalman_innovation_gate_confidence",
-            self.innovation_gate_confidence,
-        )
         self.kalman_labels: dict[str, QLabel] = {}
         for key, label, minimum, maximum, decimals in [
             ("mask_threshold", "Mask threshold", 0.01, 0.99, 2),
             ("kalman_q_pos", "Kalman position variance (px^2)", 0, 1000, 2),
             ("kalman_q_vel", "Kalman velocity variance (px^2/s^2)", 0, 1000, 2),
             ("kalman_r", "Kalman measurement variance (px^2)", 0.01, 1000, 2),
-            ("kalman_innovation_gate_min_radius_px", "Minimum gate radius (px)", 0, 2000, 1),
             ("progress_interval_seconds", "Progress update interval (seconds)", 2, 30, 1),
         ]:
             field = QDoubleSpinBox()
@@ -2233,7 +2188,6 @@ class SettingsDialog(QDialog):
                 "kalman_q_pos",
                 "kalman_q_vel",
                 "kalman_r",
-                "kalman_innovation_gate_min_radius_px",
             ):
                 self.kalman_labels[key] = field_label
             self.fields[key] = field
@@ -2272,8 +2226,6 @@ class SettingsDialog(QDialog):
             self.axis_mode,
             self.axis_angle,
             self.tracking_filter,
-            self.innovation_gate,
-            self.innovation_gate_confidence,
             *self.fields.values(),
             self.refine,
             self.batch_size,
@@ -2297,7 +2249,6 @@ class SettingsDialog(QDialog):
         self.model_selector.currentTextChanged.connect(self.change_model_profile)
         self.axis_mode.currentIndexChanged.connect(self.update_axis_fields)
         self.tracking_filter.currentIndexChanged.connect(self.update_tracking_filter_fields)
-        self.innovation_gate.toggled.connect(self.update_tracking_filter_fields)
         self.load_parameter_values(self.parameter_profiles[self.editing_model_name])
         buttons = QHBoxLayout()
         restore = QPushButton("Restore model defaults")
@@ -2359,7 +2310,7 @@ class SettingsDialog(QDialog):
     def update_benchmark_summary(self) -> None:
         count = len(self.kalman_benchmark_combinations)
         self.benchmark_summary.setText(
-            f"{count} configuration{'s' if count != 1 else ''} active"
+            f"Unfiltered reference + {count} Kalman configuration{'s' if count != 1 else ''}"
             if count else "Disabled"
         )
 
@@ -2381,10 +2332,6 @@ class SettingsDialog(QDialog):
             "bending_axis_angle_deg": self.axis_angle.value(),
             "legacy_area_normalization": self.area_normalization.isChecked(),
             "tracking_filter_mode": self.tracking_filter.currentData(),
-            "kalman_innovation_gate_enabled": self.innovation_gate.isChecked(),
-            "kalman_innovation_gate_confidence": (
-                self.innovation_gate_confidence.value() / 100.0
-            ),
             "refine_iterations": self.refine.value(),
             "inference_batch_size": self.batch_size.value(),
             "cpu_postprocess_workers": self.cpu_workers.value(),
@@ -2402,12 +2349,6 @@ class SettingsDialog(QDialog):
             values.get("tracking_filter_mode", "kalman")
         )
         self.tracking_filter.setCurrentIndex(max(0, filter_index))
-        self.innovation_gate.setChecked(
-            bool(values.get("kalman_innovation_gate_enabled", True))
-        )
-        self.innovation_gate_confidence.setValue(
-            100.0 * float(values.get("kalman_innovation_gate_confidence", 0.99))
-        )
         self.refine.setValue(int(values.get("refine_iterations", self.settings.refine_iterations)))
         self.batch_size.setValue(int(values.get("inference_batch_size", self.settings.inference_batch_size)))
         self.cpu_workers.setValue(int(values.get("cpu_postprocess_workers", self.settings.cpu_postprocess_workers)))
@@ -2424,21 +2365,9 @@ class SettingsDialog(QDialog):
             "kalman_q_pos",
             "kalman_q_vel",
             "kalman_r",
-            "kalman_innovation_gate_min_radius_px",
         ):
             self.fields[key].setEnabled(kalman_enabled)
             self.kalman_labels[key].setEnabled(kalman_enabled)
-        self.fields["kalman_innovation_gate_min_radius_px"].setEnabled(
-            kalman_enabled and self.innovation_gate.isChecked()
-        )
-        self.kalman_labels["kalman_innovation_gate_min_radius_px"].setEnabled(
-            kalman_enabled and self.innovation_gate.isChecked()
-        )
-        self.innovation_gate.setEnabled(kalman_enabled)
-        self.innovation_gate_label.setEnabled(kalman_enabled)
-        confidence_enabled = kalman_enabled and self.innovation_gate.isChecked()
-        self.innovation_gate_confidence.setEnabled(confidence_enabled)
-        self.innovation_gate_confidence_label.setEnabled(confidence_enabled)
 
     def change_model_profile(self, model_name: str) -> None:
         if not model_name or model_name == self.editing_model_name:

@@ -303,19 +303,18 @@ def tracking_filter_mode(cfg: dict) -> str:
     return mode
 
 
-def kalman_innovation_gate_threshold(cfg: dict) -> float | None:
-    """Return the two-dimensional chi-square gate threshold, or None if disabled.
+KALMAN_INNOVATION_GATE_CONFIDENCE = 0.99
+KALMAN_INNOVATION_GATE_MIN_RADIUS_PX = 120.0
+
+
+def kalman_innovation_gate_threshold() -> float:
+    """Return the fixed two-dimensional chi-square threshold for Kalman QC.
 
     For two observed coordinates, the chi-square quantile has the exact closed
     form ``-2 log(1-confidence)``. Avoiding a SciPy dependency keeps the same
     calculation available in the standalone Colab worker.
     """
-    if not bool(cfg.get("kalman_innovation_gate_enabled", True)):
-        return None
-    confidence = float(cfg.get("kalman_innovation_gate_confidence", 0.99))
-    if not 0.0 < confidence < 1.0:
-        raise ValueError("Kalman innovation-gate confidence must be between 0 and 1.")
-    return float(-2.0 * np.log1p(-confidence))
+    return float(-2.0 * np.log1p(-KALMAN_INNOVATION_GATE_CONFIDENCE))
 
 
 def track_centers(fits: list[tuple], fps: float, cfg: dict) -> CenterTrackingResult:
@@ -323,14 +322,12 @@ def track_centers(fits: list[tuple], fps: float, cfg: dict) -> CenterTrackingRes
     if not np.isfinite(fps) or fps <= 0:
         raise ValueError("Tracking requires a finite positive frame rate.")
     mode = tracking_filter_mode(cfg)
-    threshold = kalman_innovation_gate_threshold(cfg) if mode == "kalman" else None
+    threshold = kalman_innovation_gate_threshold() if mode == "kalman" else None
     centers: list[tuple[float, float]] = []
     states: list[str] = []
     innovation_distances: list[float] = []
     innovation_squared: list[float] = []
-    minimum_radius = float(cfg.get("kalman_innovation_gate_min_radius_px", 120.0))
-    if minimum_radius < 0.0 or not np.isfinite(minimum_radius):
-        raise ValueError("Kalman innovation-gate minimum radius must be finite and non-negative.")
+    minimum_radius = KALMAN_INNOVATION_GATE_MIN_RADIUS_PX
     filter_state = None
     for x, y, *_ in fits:
         measurement_valid = bool(np.isfinite(x) and np.isfinite(y))
@@ -459,11 +456,11 @@ def trace_from_tracking(
     filter_mode = tracking_filter_mode(cfg)
     trace["tracking_filter_mode"] = filter_mode
     gate_threshold = (
-        kalman_innovation_gate_threshold(cfg) if filter_mode == "kalman" else None
+        kalman_innovation_gate_threshold() if filter_mode == "kalman" else None
     )
     trace["kalman_innovation_gate_enabled"] = gate_threshold is not None
     trace["kalman_innovation_gate_confidence"] = (
-        float(cfg.get("kalman_innovation_gate_confidence", 0.99))
+        KALMAN_INNOVATION_GATE_CONFIDENCE
         if gate_threshold is not None
         else np.nan
     )
@@ -471,7 +468,7 @@ def trace_from_tracking(
         gate_threshold if gate_threshold is not None else np.nan
     )
     trace["kalman_innovation_gate_min_radius_px"] = (
-        float(cfg.get("kalman_innovation_gate_min_radius_px", 120.0))
+        KALMAN_INNOVATION_GATE_MIN_RADIUS_PX
         if gate_threshold is not None
         else np.nan
     )
@@ -568,6 +565,15 @@ def apply_force_calibration(trace: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 def benchmark_slug(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_")
     return slug or "configuration"
+
+
+def benchmark_configurations(cfg: dict) -> list[dict]:
+    """Return the raw reference and the user-selected Kalman variants."""
+    combinations = cfg.get("kalman_benchmark", [])
+    if not isinstance(combinations, list):
+        raise ValueError("Kalman benchmark settings must be a list of configurations.")
+    # Every smoothing comparison requires the same raw-center reference.
+    return [{"name": "Unfiltered", "tracking_filter_mode": "none"}, *combinations]
 
 
 def prepare_live_trace_panel(
@@ -1114,14 +1120,13 @@ def process_video(
     )
     benchmark_combinations = cfg.get("kalman_benchmark", [])
     if benchmark_combinations:
-        if not isinstance(benchmark_combinations, list):
-            raise ValueError("Kalman benchmark settings must be a list of configurations.")
+        benchmark_configurations(cfg)  # Validate the submitted benchmark once.
         benchmark_root = output / "kalman_benchmark"
         results: dict[str, Path] = {}
         settings_rows = []
         used_slugs: set[str] = set()
         benchmark_video_specs = []
-        for combination in benchmark_combinations:
+        for combination in benchmark_configurations(cfg):
             name = str(combination.get("name", "Configuration")).strip() or "Configuration"
             slug = benchmark_slug(name)
             suffix = 2
@@ -1131,11 +1136,14 @@ def process_video(
                 suffix += 1
             used_slugs.add(slug)
             variant_cfg = dict(cfg)
-            variant_cfg["tracking_filter_mode"] = "kalman"
-            for key in ("kalman_q_pos", "kalman_q_vel", "kalman_r"):
-                if key not in combination:
-                    raise ValueError(f"Benchmark configuration '{name}' is missing {key}.")
-                variant_cfg[key] = float(combination[key])
+            variant_cfg["tracking_filter_mode"] = combination.get(
+                "tracking_filter_mode", "kalman"
+            )
+            if variant_cfg["tracking_filter_mode"] == "kalman":
+                for key in ("kalman_q_pos", "kalman_q_vel", "kalman_r"):
+                    if key not in combination:
+                        raise ValueError(f"Benchmark configuration '{name}' is missing {key}.")
+                    variant_cfg[key] = float(combination[key])
             variant_tracking = track_centers(fits, fps, variant_cfg)
             variant_centers = variant_tracking.centers
             trace = trace_from_tracking(
@@ -1158,20 +1166,32 @@ def process_video(
             settings_rows.append({
                 "name": name,
                 "folder": slug,
-                "kalman_q_pos_px2": variant_cfg["kalman_q_pos"],
-                "kalman_q_vel_px2_per_s2": variant_cfg["kalman_q_vel"],
-                "kalman_r_px2": variant_cfg["kalman_r"],
+                "tracking_filter_mode": variant_cfg["tracking_filter_mode"],
+                "kalman_q_pos_px2": (
+                    variant_cfg["kalman_q_pos"]
+                    if variant_cfg["tracking_filter_mode"] == "kalman" else np.nan
+                ),
+                "kalman_q_vel_px2_per_s2": (
+                    variant_cfg["kalman_q_vel"]
+                    if variant_cfg["tracking_filter_mode"] == "kalman" else np.nan
+                ),
+                "kalman_r_px2": (
+                    variant_cfg["kalman_r"]
+                    if variant_cfg["tracking_filter_mode"] == "kalman" else np.nan
+                ),
                 "kalman_innovation_gate_enabled": (
                     variant_tracking.innovation_threshold_d2 is not None
                 ),
-                "kalman_innovation_gate_confidence": variant_cfg.get(
-                    "kalman_innovation_gate_confidence", 0.99
+                "kalman_innovation_gate_confidence": (
+                    KALMAN_INNOVATION_GATE_CONFIDENCE
+                    if variant_tracking.innovation_threshold_d2 is not None else np.nan
                 ),
                 "kalman_innovation_gate_threshold_d2": (
                     variant_tracking.innovation_threshold_d2
                 ),
-                "kalman_innovation_gate_min_radius_px": variant_cfg.get(
-                    "kalman_innovation_gate_min_radius_px", 120.0
+                "kalman_innovation_gate_min_radius_px": (
+                    KALMAN_INNOVATION_GATE_MIN_RADIUS_PX
+                    if variant_tracking.innovation_threshold_d2 is not None else np.nan
                 ),
             })
             if final_runtime_settings.get(
@@ -1289,7 +1309,7 @@ def create_benchmark_master(
     all_data: dict[str, pd.Series] = {}
     configured_names = {}
     used_folders: set[str] = set()
-    for combination in cfg.get("kalman_benchmark", []):
+    for combination in benchmark_configurations(cfg):
         folder = benchmark_slug(combination.get("name", "Configuration"))
         suffix = 2
         original_folder = folder

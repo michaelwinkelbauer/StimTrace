@@ -66,21 +66,11 @@ class ModelManagerTests(unittest.TestCase):
         self.assertFalse(expert.isAncestorOf(dialog.tracking_filter))
         dialog.close()
 
-    def test_innovation_gate_is_enabled_at_99_percent_by_default(self):
+    def test_innovation_gate_controls_are_not_user_settings(self):
         dialog = SettingsDialog(Settings())
 
-        self.assertTrue(dialog.innovation_gate.isChecked())
-        self.assertAlmostEqual(dialog.innovation_gate_confidence.value(), 99.0)
-        self.assertAlmostEqual(
-            dialog.fields["kalman_innovation_gate_min_radius_px"].value(),
-            120.0,
-        )
-        self.assertTrue(dialog.innovation_gate_confidence.isEnabled())
-        dialog.innovation_gate.setChecked(False)
-        self.assertFalse(dialog.innovation_gate_confidence.isEnabled())
-        self.assertFalse(
-            dialog.fields["kalman_innovation_gate_min_radius_px"].isEnabled()
-        )
+        self.assertNotIn("kalman_innovation_gate_min_radius_px", dialog.fields)
+        self.assertFalse(hasattr(dialog, "innovation_gate"))
         dialog.close()
 
     def test_pixel_calibration_receives_random_segment_videos(self):

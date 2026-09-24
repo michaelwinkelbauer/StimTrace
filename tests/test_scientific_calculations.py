@@ -8,6 +8,7 @@ import numpy as np
 from colab_worker import (
     CenterTrailRenderer,
     KalmanCenter,
+    benchmark_configurations,
     kalman_innovation_gate_threshold,
     kalman_track,
     track_centers,
@@ -27,9 +28,6 @@ class ScientificCalculationTests(unittest.TestCase):
             "kalman_q_pos": 2.0,
             "kalman_q_vel": 36.0,
             "kalman_r": 8.0,
-            "kalman_innovation_gate_enabled": True,
-            "kalman_innovation_gate_confidence": 0.99,
-            "kalman_innovation_gate_min_radius_px": 120.0,
         }
 
     def test_force_uses_one_real_diastolic_reference_and_calibrated_axis(self):
@@ -117,7 +115,7 @@ class ScientificCalculationTests(unittest.TestCase):
         self.assertTrue(np.isnan(trace.loc[2, "Force_uN"]))
         self.assertTrue(trace.loc[2, "kalman_innovation_gate_enabled"])
 
-    def test_innovation_gate_can_be_disabled_explicitly(self):
+    def test_innovation_gate_is_automatic_and_cannot_be_disabled_by_a_job_setting(self):
         fits = [
             (10.0, 5.0, 4.0, 4.0, 0.0, "ellipsefit"),
             (500.0, 400.0, 4.0, 4.0, 0.0, "ellipsefit"),
@@ -126,15 +124,25 @@ class ScientificCalculationTests(unittest.TestCase):
 
         tracking = track_centers(fits, 20.0, settings)
 
-        self.assertEqual(tracking.states, ["measured", "measured"])
-        self.assertIsNone(tracking.innovation_threshold_d2)
-        self.assertGreater(tracking.centers[1][0], 100.0)
+        self.assertEqual(tracking.states, ["measured", "innovation_rejected"])
+        self.assertIsNotNone(tracking.innovation_threshold_d2)
+        self.assertLess(tracking.centers[1][0], 100.0)
 
     def test_99_percent_two_dimensional_gate_uses_chi_square_threshold(self):
         self.assertAlmostEqual(
-            kalman_innovation_gate_threshold(self.settings),
+            kalman_innovation_gate_threshold(),
             9.210340371976182,
         )
+
+    def test_benchmark_always_includes_an_unfiltered_reference(self):
+        variants = benchmark_configurations({
+            "kalman_benchmark": [{"name": "Default", "kalman_q_pos": 2.0}],
+        })
+
+        self.assertEqual(
+            variants[0], {"name": "Unfiltered", "tracking_filter_mode": "none"}
+        )
+        self.assertEqual(variants[1]["name"], "Default")
 
     def test_original_120_px_radius_is_the_default_covariance_gate_floor(self):
         fits = [
@@ -143,18 +151,11 @@ class ScientificCalculationTests(unittest.TestCase):
         ]
 
         compatible = track_centers(fits, 20.0, self.settings)
-        pure_covariance = track_centers(
-            fits,
-            20.0,
-            {**self.settings, "kalman_innovation_gate_min_radius_px": 0.0},
-        )
-
         self.assertGreater(
             compatible.innovation_mahalanobis_d2[1],
             compatible.innovation_threshold_d2,
         )
         self.assertEqual(compatible.states[1], "measured")
-        self.assertEqual(pure_covariance.states[1], "innovation_rejected")
 
     def test_innovation_covariance_expands_during_unobserved_predictions(self):
         filter_state = KalmanCenter(0.0, 0.0, 0.05, 2.0, 36.0, 8.0)

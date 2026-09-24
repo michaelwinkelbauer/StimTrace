@@ -248,17 +248,21 @@ future application builds.
 6. Save the job results, analysis settings, calibration information, and active model
    name with the experiment.
 
-With Kalman smoothing enabled, **Advanced settings** includes an innovation gate. It is
-enabled at 99% by default with the original notebook's 120 px minimum acceptance radius.
+With Kalman smoothing enabled, StimTrace automatically applies its fixed 99%
+innovation check with the original notebook's 120 px minimum acceptance radius; this QC
+rule is not a user setting.
 Frames labelled `innovation_rejected` retain the raw segmented center for review but have
 blank accepted-center, displacement, and force values. Do not treat the filter's internal
-prediction as a measured center. Set the minimum radius to zero only when Q and R have been
-calibrated for a pure covariance gate on representative recordings.
+prediction as a measured center.
+
+When a Kalman benchmark is enabled, its output always includes an **Unfiltered** raw-center
+reference in addition to the selected Kalman configurations. Use this reference to compare
+the effect of smoothing on amplitudes and kinetic measurements.
 
 Kalman smoothing changes the tracked displacement trajectory and can alter peak amplitude,
 rise/relaxation timing, and contraction or relaxation slopes. For primary kinetic
 measurements, use **None (raw segmentation centers)** when segmentation quality is
-adequate. If using Kalman smoothing, record the filter and gate settings and verify that
+adequate. If using Kalman smoothing, record the filter settings and verify that
 they do not materially change the endpoint of interest. This choice is separate from
 signal-analysis smoothing and baseline correction, which can also change kinetic metrics.
 

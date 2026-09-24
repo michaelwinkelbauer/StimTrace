@@ -167,14 +167,19 @@ signal per recording for direct analysis. When recordings use different frame ra
 combined normal and Kalman-benchmark CSVs preserve each recording's original timestamps
 on a shared time axis; blank cells indicate times not sampled by that recording. Detailed per-recording
 `*_stimtrace_tracking.csv` files retain pixel and micrometer displacement, tracked-center,
-ellipse, force, and Kalman innovation-QC data. With Kalman smoothing, the default 99%
-covariance-based innovation gate retains the original notebook's 120 px minimum
-acceptance radius and labels larger statistically implausible segmented centers as
+ellipse, force, and Kalman innovation-QC data. With Kalman smoothing, StimTrace
+automatically applies the fixed 99% covariance-based innovation check with the
+original notebook's 120 px minimum acceptance radius and labels larger statistically
+implausible segmented centers as
 `innovation_rejected`. Their raw centers remain available for inspection, while their
 accepted center, displacement, and force values remain blank. Legacy `combined_force_results.csv` and
 `*_pillar_displacement.csv` files remain readable. Inversion and baseline correction are
 applied on demand in the signal-analysis workspace instead of being stored as duplicate
 traces.
+
+Whenever a Kalman benchmark is enabled, StimTrace also writes an `Unfiltered` reference
+from the raw segmented centers. The combined benchmark CSV therefore lets every Kalman
+variant be compared directly against the same unsmoothed signal.
 
 ### Kalman filtering and kinetic measurements
 
@@ -183,7 +188,7 @@ segmentation errors, but it changes the tracked displacement trajectory. It can 
 alter peak amplitude, rise time, relaxation time, contraction or relaxation slopes, and
 beat timing. For primary kinetic endpoints, use the unfiltered measured trajectory
 (`Tracking filter: None`) when segmentation quality is adequate. If a Kalman-filtered
-trajectory is used, report the filter and innovation-gate settings and validate that they
+trajectory is used, report the filter settings and validate that they
 do not materially change the endpoint of interest. Do not treat a filter-predicted
 position as an independent measurement. This tracking choice is separate from any
 signal-analysis smoothing or baseline correction, which can also alter kinetic metrics.
