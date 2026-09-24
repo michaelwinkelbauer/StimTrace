@@ -176,6 +176,18 @@ accepted center, displacement, and force values remain blank. Legacy `combined_f
 applied on demand in the signal-analysis workspace instead of being stored as duplicate
 traces.
 
+### Kalman filtering and kinetic measurements
+
+Kalman smoothing can improve visual continuity and reduce the influence of isolated
+segmentation errors, but it changes the tracked displacement trajectory. It can therefore
+alter peak amplitude, rise time, relaxation time, contraction or relaxation slopes, and
+beat timing. For primary kinetic endpoints, use the unfiltered measured trajectory
+(`Tracking filter: None`) when segmentation quality is adequate. If a Kalman-filtered
+trajectory is used, report the filter and innovation-gate settings and validate that they
+do not materially change the endpoint of interest. Do not treat a filter-predicted
+position as an independent measurement. This tracking choice is separate from any
+signal-analysis smoothing or baseline correction, which can also alter kinetic metrics.
+
 ## Training a segmentation model
 
 Open **Train models** in the persistent top navigation, or choose **Train new model** from **Models**. The training workspace replaces the central page and keeps the same application ribbon. Create an annotation project by extracting every Nth frame from one or more videos, then draw polygons around the target object. Polygon labels such as `Pillar`, `Tissue`, and `Other` are stored in per-frame JSON files; a binary PNG mask is generated alongside every annotation.

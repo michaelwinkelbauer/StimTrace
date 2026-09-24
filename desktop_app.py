@@ -259,7 +259,10 @@ SETTING_DESCRIPTIONS = {
     "tracking_filter_mode": (
         "Kalman smoothing combines each segmented center with a constant-velocity motion "
         "prediction. None uses the raw center measured from every valid segmentation; "
-        "frames without a valid mask remain missing."
+        "frames without a valid mask remain missing. Kalman filtering changes the displacement "
+        "trajectory and can alter kinetic metrics such as peak amplitude, timing, and slopes. "
+        "For primary kinetic endpoints, use None when segmentation quality is adequate, or "
+        "validate and report the Kalman and innovation-gate settings."
     ),
     "kalman_q_vel": (
         "Velocity process-noise variance in px^2/s^2, added at each prediction step. Higher "

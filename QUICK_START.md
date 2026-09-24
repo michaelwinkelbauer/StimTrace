@@ -255,6 +255,13 @@ blank accepted-center, displacement, and force values. Do not treat the filter's
 prediction as a measured center. Set the minimum radius to zero only when Q and R have been
 calibrated for a pure covariance gate on representative recordings.
 
+Kalman smoothing changes the tracked displacement trajectory and can alter peak amplitude,
+rise/relaxation timing, and contraction or relaxation slopes. For primary kinetic
+measurements, use **None (raw segmentation centers)** when segmentation quality is
+adequate. If using Kalman smoothing, record the filter and gate settings and verify that
+they do not materially change the endpoint of interest. This choice is separate from
+signal-analysis smoothing and baseline correction, which can also change kinetic metrics.
+
 Use the **Help** button on each page for control-specific instructions. Use **Jobs** as the
 central place to find, retry, download, and reopen previous segmentation and training
 jobs.
