@@ -70,17 +70,17 @@ class SignalProcessingTests(unittest.TestCase):
         self.assertEqual(result["selected_count"], 1)
         self.assertEqual(result["summary"].iloc[0]["Reference_trace"], reference)
         self.assertAlmostEqual(
-            result["summary"].iloc[0]["Amplitude_mean_pct_baseline"], 200.0
+            result["summary"].iloc[0]["Amplitude_uN_mean_pct_baseline"], 200.0
         )
         self.assertAlmostEqual(
-            result["summary"].iloc[0]["Peak_force_mean_pct_baseline"], 200.0
+            result["summary"].iloc[0]["Peak_force_uN_mean_pct_baseline"], 200.0
         )
         self.assertAlmostEqual(
-            result["summary"].iloc[0]["Max_contraction_slope_per_s_mean_pct_baseline"],
+            result["summary"].iloc[0]["Max_contraction_slope_uN_per_s_mean_pct_baseline"],
             200.0,
         )
         self.assertAlmostEqual(
-            result["summary"].iloc[0]["Max_relaxation_slope_per_s_mean_pct_baseline"],
+            result["summary"].iloc[0]["Max_relaxation_slope_uN_per_s_mean_pct_baseline"],
             200.0,
         )
         self.assertIn("Rise_10_90_ms_mean_pct_baseline", result["summary"].columns)
@@ -108,15 +108,15 @@ class SignalProcessingTests(unittest.TestCase):
         self.assertEqual(reference_match_key(selected), "b-1")
         self.assertEqual(row["Reference_trace"], reference)
         self.assertEqual(row["Reference_match_status"], "Matched by specimen")
-        self.assertAlmostEqual(row["Amplitude_mean_pct_baseline"], 200.0)
+        self.assertAlmostEqual(row["Amplitude_uN_mean_pct_baseline"], 200.0)
 
     def test_summary_includes_normalized_columns_when_references_are_matched(self):
         columns = summary_display_columns(pd.DataFrame({
             "Trace": ["H_B-1"],
-            "Peak_force_mean": [1250.0],
-            "Peak_force_mean_pct_baseline": [125.0],
-            "Amplitude_mean": [100.0],
-            "Amplitude_mean_pct_baseline": [125.0],
+            "Peak_force_uN_mean": [1250.0],
+            "Peak_force_uN_mean_pct_baseline": [125.0],
+            "Amplitude_uN_mean": [100.0],
+            "Amplitude_uN_mean_pct_baseline": [125.0],
             "Beat_rate_BPM": [40.0],
             "Beat_rate_BPM_pct_baseline": [110.0],
             "Relaxation_50_ms_mean": [300.0],
@@ -125,26 +125,26 @@ class SignalProcessingTests(unittest.TestCase):
             "Rise_10_90_ms_mean_pct_baseline": [95.0],
             "CTD50_ms_mean": [400.0],
             "CTD50_ms_mean_pct_baseline": [115.0],
-            "Max_contraction_slope_per_s_mean": [2000.0],
-            "Max_contraction_slope_per_s_mean_pct_baseline": [130.0],
-            "Max_relaxation_slope_per_s_mean": [-1200.0],
-            "Max_relaxation_slope_per_s_mean_pct_baseline": [90.0],
+            "Max_contraction_slope_uN_per_s_mean": [2000.0],
+            "Max_contraction_slope_uN_per_s_mean_pct_baseline": [130.0],
+            "Max_relaxation_slope_uN_per_s_mean": [-1200.0],
+            "Max_relaxation_slope_uN_per_s_mean_pct_baseline": [90.0],
         }))
-        self.assertIn("Amplitude_mean_pct_baseline", columns)
-        self.assertIn("Peak_force_mean_pct_baseline", columns)
+        self.assertIn("Amplitude_uN_mean_pct_baseline", columns)
+        self.assertIn("Peak_force_uN_mean_pct_baseline", columns)
         self.assertIn("Beat_rate_BPM_pct_baseline", columns)
         self.assertIn("Relaxation_50_ms_mean_pct_baseline", columns)
         self.assertIn("Rise_10_90_ms_mean_pct_baseline", columns)
         self.assertIn("CTD50_ms_mean_pct_baseline", columns)
-        self.assertIn("Max_contraction_slope_per_s_mean_pct_baseline", columns)
-        self.assertIn("Max_relaxation_slope_per_s_mean_pct_baseline", columns)
+        self.assertIn("Max_contraction_slope_uN_per_s_mean_pct_baseline", columns)
+        self.assertIn("Max_relaxation_slope_uN_per_s_mean_pct_baseline", columns)
 
     def test_summary_hides_normalized_columns_without_reference_results(self):
         columns = summary_display_columns(pd.DataFrame({
             "Trace": ["H_B-1"],
-            "Amplitude_mean": [100.0],
+            "Amplitude_uN_mean": [100.0],
         }))
-        self.assertNotIn("Amplitude_mean_pct_baseline", columns)
+        self.assertNotIn("Amplitude_uN_mean_pct_baseline", columns)
 
     def test_loaded_source_folder_label_is_clear_for_one_or_multiple_folders(self):
         one_folder = SignalAnalysisPage.loaded_source_folder_text([
@@ -243,7 +243,7 @@ class SignalProcessingTests(unittest.TestCase):
         self.assertEqual(row["N_beats"], 0)
         self.assertEqual(row["Analysis_status"], "No beats detected")
         self.assertIn("No beats detected", row["Analysis_error"])
-        self.assertTrue(np.isnan(row["Peak_force_mean"]))
+        self.assertTrue(np.isnan(row["Peak_force_uN_mean"]))
         self.assertTrue(result["beats"].empty)
         self.assertIn("Analysis_status", summary_display_columns(result["summary"]))
 
