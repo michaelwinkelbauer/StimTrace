@@ -62,7 +62,18 @@ foreach ($Document in @(
 
 $ThirdPartySource = Join-Path $Project "THIRD_PARTY_LICENSES"
 $ThirdPartyDestination = Join-Path $Project "dist\$BundleName\THIRD_PARTY_LICENSES"
-Copy-Item -LiteralPath $ThirdPartySource -Destination $ThirdPartyDestination -Recurse -Force
+New-Item -ItemType Directory -Path $ThirdPartyDestination -Force | Out-Null
+# Some wheels (notably PyTorch) ship deeply nested vendored test-project
+# licenses. Copy the supplied notices while omitting that generated subtree so
+# Windows MAX_PATH cannot prevent an otherwise valid release from being built.
+Get-ChildItem -LiteralPath $ThirdPartySource -File -Recurse |
+    Where-Object { $_.FullName -notmatch "[\\/]licenses[\\/]third_party([\\/]|$)" } |
+    ForEach-Object {
+        $Relative = $_.FullName.Substring($ThirdPartySource.Length).TrimStart('\\', '/')
+        $Destination = Join-Path $ThirdPartyDestination $Relative
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Destination) -Force | Out-Null
+        Copy-Item -LiteralPath $_.FullName -Destination $Destination -Force
+    }
 
 Write-Host ""
 Write-Host "StimTrace was built successfully:"

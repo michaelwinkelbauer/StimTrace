@@ -61,7 +61,6 @@ datas = [
     (str(project_dir / "NOTICE.md"), "."),
     (str(project_dir / "AUTHORS.md"), "."),
     (str(project_dir / "CITATION.cff"), "."),
-    (str(project_dir / "THIRD_PARTY_LICENSES"), "THIRD_PARTY_LICENSES"),
     (str(model_path), "."),
 ]
 binaries = []
