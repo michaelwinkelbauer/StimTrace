@@ -81,7 +81,7 @@ New-Item -ItemType Directory -Path $ThirdPartyDestination -Force | Out-Null
 Get-ChildItem -LiteralPath $ThirdPartySource -File -Recurse |
     Where-Object { $_.FullName -notmatch "[\\/]licenses[\\/]third_party([\\/]|$)" } |
     ForEach-Object {
-        $Relative = $_.FullName.Substring($ThirdPartySource.Length).TrimStart('\\', '/')
+        $Relative = $_.FullName.Substring($ThirdPartySource.Length + 1)
         $Destination = Join-Path $ThirdPartyDestination $Relative
         New-Item -ItemType Directory -Path (Split-Path -Parent $Destination) -Force | Out-Null
         Copy-Item -LiteralPath $_.FullName -Destination $Destination -Force
