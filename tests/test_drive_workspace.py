@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from colab_worker import WORKER_VERSION
+from analysis_worker import WORKER_VERSION
 from desktop_app import DriveClient, MainWindow, NOTEBOOK_VERSION, Settings
 
 

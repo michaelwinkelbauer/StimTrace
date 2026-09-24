@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from colab_worker import (
+from analysis_worker import (
     combine_signals_by_time,
     indexed_signal,
     lower_cuda_batch_size,

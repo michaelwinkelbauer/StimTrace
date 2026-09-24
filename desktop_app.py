@@ -84,7 +84,7 @@ CRASH_LOG_PATH = USER_DATA_DIR / "stimtrace_crash.log"
 APP_LOG_PATH = USER_DATA_DIR / "stimtrace.log"
 LOGGER = get_logger("desktop")
 _FAULT_LOG_HANDLE = None
-NOTEBOOK_VERSION = 63
+NOTEBOOK_VERSION = 64
 WORKER_HEARTBEAT_GRACE_SECONDS = 120
 
 
@@ -1116,7 +1116,7 @@ class DriveClient:
                 ],
                 None,
             ),
-            ("worker_file_id", "colab_worker.py", [RESOURCE_DIR / "colab_worker.py"], "text/x-python"),
+            ("worker_file_id", "analysis_worker.py", [RESOURCE_DIR / "analysis_worker.py"], "text/x-python"),
             (
                 "notebook_file_id",
                 "StimTrace Compute.ipynb",

@@ -11,14 +11,14 @@ StimTrace can process recordings either on the researcher's computer or through 
 
 1. `desktop_app.py` is the Windows desktop GUI and contains the persistent Cloud/This computer selector.
 2. `local_runner.py` runs the model in a separate local process, automatically selecting NVIDIA CUDA when supported and otherwise using the CPU.
-3. `stimtrace_colab_worker.ipynb` runs in the researcher's own Google Colab GPU runtime. The desktop app uploads the notebook, `colab_worker.py`, and approved model to the researcher's Drive on first sign-in.
+3. `stimtrace_colab_worker.ipynb` runs in the researcher's own Google Colab GPU runtime. The desktop app uploads the notebook, `analysis_worker.py`, and approved model to the researcher's Drive on first sign-in.
 
 Supporting modules keep infrastructure concerns out of the GUI and scientific
 worker: `background_tasks.py` owns asynchronous Qt/process workers,
 `job_utils.py` owns shared job-state, timestamp, path, and result-selection
 logic, and `app_logging.py` configures bounded rotating application logs. The
 public entry points remain `desktop_app.py`, `local_runner.py`, and
-`colab_worker.py`.
+`analysis_worker.py`.
 
 ## Source repository and release files
 

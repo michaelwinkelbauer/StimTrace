@@ -17,7 +17,7 @@ REQUIRED_RESOURCES = (
     "assets",
     "assets/stimtrace.ico",
     "assets/stimtrace-logo.png",
-    "colab_worker.py",
+    "analysis_worker.py",
     "stimtrace_colab_worker.ipynb",
     "LICENSE",
     "NOTICE.md",

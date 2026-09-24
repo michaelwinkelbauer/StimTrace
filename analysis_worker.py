@@ -34,7 +34,7 @@ from albumentations.pytorch import ToTensorV2
 import segmentation_models_pytorch as smp
 
 MEAN, STD = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-WORKER_VERSION = 63
+WORKER_VERSION = 64
 
 
 @dataclass

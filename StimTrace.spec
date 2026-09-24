@@ -55,7 +55,7 @@ if model_path is None:
 
 datas = [
     (str(project_dir / "assets"), "assets"),
-    (str(project_dir / "colab_worker.py"), "."),
+    (str(project_dir / "analysis_worker.py"), "."),
     (str(project_dir / "stimtrace_colab_worker.ipynb"), "."),
     (str(project_dir / "LICENSE"), "."),
     (str(project_dir / "NOTICE.md"), "."),

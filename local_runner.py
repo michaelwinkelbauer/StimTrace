@@ -76,7 +76,7 @@ def render_downloaded_overlays(
     import cv2
     import numpy as np
     import pandas as pd
-    from colab_worker import create_overlay_video
+    from analysis_worker import create_overlay_video
 
     sources = {Path(path).stem.casefold(): Path(path) for path in source_paths}
     created: list[str] = []
@@ -231,7 +231,7 @@ def run_local(
 ) -> Path:
     # Keep the startup hardware probe lightweight. The scientific segmentation
     # stack is only needed once a local analysis actually starts.
-    from colab_worker import (
+    from analysis_worker import (
         DeferredOverlayResult,
         PillarCenterTrackingError,
         create_benchmark_master,

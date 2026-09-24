@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import numpy as np
 
-from colab_worker import (
+from analysis_worker import (
     CenterTrailRenderer,
     KalmanCenter,
     benchmark_configurations,
